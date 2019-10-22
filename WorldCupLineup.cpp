@@ -10,6 +10,16 @@
 
 using namespace std;
 
+/**
+ * assertだとスタックトレースが表示されないので、その代わりに
+ * gdb,vs,vscodeなどのデバッガを使う方がいい
+ */
+void SHOW_STACK_TRACE()
+{
+  volatile int *t = 0;
+  *t = 1;
+}
+
 vector<string> split(string s, char delimiter)
 {
   istringstream stream(s);
@@ -73,20 +83,20 @@ public:
   }
 
   // [0, n)
-  int get(int n) { return xor64() % n; }
+  int nextInt(int n) { return xor64() % n; }
 
   // [low, high)
-  int get(int low, int high) { return xor64() % (high - low) + low; }
-  double getDouble() { return xor64() / double(std::numeric_limits<std::uint64_t>::max()); }
+  int nextInt(int low, int high) { return xor64() % (high - low) + low; }
+  double nextDouble() { return xor64() / double(std::numeric_limits<std::uint64_t>::max()); }
 
   /**
    * 2つの相異なる数をランダムに取得する
    * get<0>(result) < get<1>(result) が保証されている
    */
-  std::tuple<int, int> get2(int low, int high)
+  std::tuple<int, int> nextIntPair(int low, int high)
   {
-    int i = get(low, high);
-    int j = get(low, high - 1);
+    int i = nextInt(low, high);
+    int j = nextInt(low, high - 1);
     if (j >= i)
       j++;
     else
@@ -98,10 +108,10 @@ public:
    * 2つの相異なる数をランダムに取得する
    * get<0>(result) < get<1>(result) は保証されない
    */
-  std::tuple<int, int> getUnordered2(int low, int high)
+  std::tuple<int, int> nextIntUnorderedPair(int low, int high)
   {
-    int i = get(low, high);
-    int j = get(low, high - 1);
+    int i = nextInt(low, high);
+    int j = nextInt(low, high - 1);
     if (j >= i)
       j++;
     return std::make_tuple(i, j);
@@ -123,7 +133,7 @@ public:
   void shuffle(T &s)
   {
     for (int i = 1; i < (int)s.size(); i++) {
-      int j = get(0, i + 1);
+      int j = nextInt(0, i + 1);
       if (i != j) {
         std::swap(s[i], s[j]);
       }
@@ -134,7 +144,7 @@ public:
   void shuffle(T (&ary)[n])
   {
     for (int i = 1; i < n; i++) {
-      int j = get(0, i + 1);
+      int j = nextInt(0, i + 1);
       if (i != j) {
         std::swap(ary[i], ary[j]);
       }
@@ -227,7 +237,7 @@ public:
     while (!history.empty()) {
       auto h = history.back();
       history.pop_back();
-      std::swap(value[h.i], value[h.j]);
+      swapValue(h.i, h.j);
       len -= h.d;
     }
   }
@@ -293,8 +303,9 @@ public:
 
   void verify()
   {
-    for (int i = 0; i < capacity; i++) {
-      if (value[index[i]] != i) {
+    for (int v = 0; v < capacity; v++) {
+      if (value[index[v]] != v) {
+        cerr << "verify failed : " << v << " " << index[v] << " " << value[index[v]] << endl;
         throw;
       }
     }
@@ -335,7 +346,7 @@ void initSimulate()
   fill(calcAgg.begin(), calcAgg.end(), 0);
   fill(carded.begin(), carded.end(), false);
   fill(done.begin(), done.end(), false);
-  injuryRate = rng.getDouble() * 0.05;
+  injuryRate = rng.nextDouble() * 0.05;
 }
 
 int getPosition(int p)
@@ -421,11 +432,11 @@ void processLineup()
 {
   for (int i = 0; i < 10; i++) {
     if (lineup[i] == -1) continue;
-    if (rng.getDouble() < injuryRate) {
+    if (rng.nextDouble() < injuryRate) {
       lineup[i] = -1;
       continue;
     }
-    if (rng.get(100) < calcAgg[i]) {
+    if (rng.nextInt(100) < calcAgg[i]) {
       if (carded[lineup[i]]) {
         lineup[i] = -1;
       } else {
@@ -485,22 +496,22 @@ public:
     }
 
     for (int i = 0; i < 30; i++) {
-      auto &o = orders[rng.get(10)];
+      auto &o = orders[rng.nextInt(10)];
       o.push_back(i);
       o.commit();
     }
 
     for (int i = 0; i < 10; i++) {
-      position[i] = "FMD"[rng.get(3)];
+      position[i] = "FMD"[rng.nextInt(3)];
     }
 
     int best = evalCost();
     for (int i = 0; i < 10000; i++) {
       if (rng.xor64() & 1) {
-        int idx = rng.get(10);
+        int idx = rng.nextInt(10);
         auto &o = orders[idx];
         if (o.empty()) continue;
-        int j = rng.get(o.size());
+        int j = rng.nextInt(o.size());
         o.removeByIndex(j);
         int curCost = evalCost();
         if (best >= curCost) {
@@ -511,10 +522,10 @@ public:
         }
         o.rollback();
       } else {
-        int idx = rng.get(10);
+        int idx = rng.nextInt(10);
         auto &o = orders[idx];
         if (o.full()) continue;
-        int j = rng.get(o.unusedSize());
+        int j = rng.nextInt(o.unusedSize());
         o.insertByIndex(j);
         int curCost = evalCost();
         if (best >= curCost) {
