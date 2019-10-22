@@ -10,16 +10,6 @@
 
 using namespace std;
 
-/**
- * assertだとスタックトレースが表示されないので、その代わりに
- * gdb,vs,vscodeなどのデバッガを使う方がいい
- */
-void SHOW_STACK_TRACE()
-{
-  volatile int *t = 0;
-  *t = 1;
-}
-
 vector<string> split(string s, char delimiter)
 {
   istringstream stream(s);
@@ -257,7 +247,12 @@ public:
     return capacity - len;
   }
 
-  void remove(int i)
+  void removeByValue(int v)
+  {
+    removeByIndex(index[v]);
+  }
+
+  void removeByIndex(int i)
   {
     if (i < 0 || i >= len) {
       cerr << "Error on SeqSet#remove: " << i << " " << len << endl;
@@ -269,12 +264,18 @@ public:
     history.emplace_back(i, len, -1);
   }
 
-  void insert(int v)
+  void insertByValue(int v)
   {
-    int i = index[v];
+    insertByIndex(index[v]);
+  }
+
+  /**
+   * i : [0, unusedSize)
+   */
+  void insertByIndex(int i)
+  {
     if (i < 0 || i >= capacity) {
       cerr << "Error on SeqSet#insert: " << i << " " << capacity << endl;
-      SHOW_STACK_TRACE();
       throw;
     }
 
@@ -284,8 +285,9 @@ public:
   }
 
   bool empty() const { return size() == 0; }
-  void pop_back() { remove(len - 1); }
-  void push_back(int i) { insert(i); }
+  bool full() const { return size() == capacity; }
+  void pop_back() { removeByIndex(len - 1); }
+  void push_back(int v) { insertByValue(v); }
 
   int operator[](int i) const { return value[i]; }
 
@@ -446,9 +448,10 @@ int simulate()
   return score;
 }
 
-int evalCost() {
+int evalCost()
+{
   int cost = 0;
-  for (int i = 0; i < 50; i++) {
+  for (int i = 0; i < 50 * 2; i++) {
     cost += -simulate();
   }
   return cost;
@@ -482,7 +485,7 @@ public:
     }
 
     for (int i = 0; i < 30; i++) {
-      auto& o = orders[rng.get(10)];
+      auto &o = orders[rng.get(10)];
       o.push_back(i);
       o.commit();
     }
@@ -493,19 +496,35 @@ public:
 
     int best = evalCost();
     for (int i = 0; i < 10000; i++) {
-      int idx = rng.get(10);
-      auto& o = orders[idx];
-      if (o.empty()) continue;
-      int j = rng.get(o.size());
-      o.remove(j);
-      int curCost = evalCost();
-      if (best >= curCost) {
-        cerr << "update : " << best << " " << curCost << endl;
-        best = curCost;
-        o.commit();
-        continue;
+      if (rng.xor64() & 1) {
+        int idx = rng.get(10);
+        auto &o = orders[idx];
+        if (o.empty()) continue;
+        int j = rng.get(o.size());
+        o.removeByIndex(j);
+        int curCost = evalCost();
+        if (best >= curCost) {
+          cerr << "update : " << best << " " << curCost << endl;
+          best = curCost;
+          o.commit();
+          continue;
+        }
+        o.rollback();
+      } else {
+        int idx = rng.get(10);
+        auto &o = orders[idx];
+        if (o.full()) continue;
+        int j = rng.get(o.unusedSize());
+        o.insertByIndex(j);
+        int curCost = evalCost();
+        if (best >= curCost) {
+          cerr << "update : " << best << " " << curCost << endl;
+          best = curCost;
+          o.commit();
+          continue;
+        }
+        o.rollback();
       }
-      o.rollback();
     }
 
     // for (int i = 0; i < 100; i++) {
